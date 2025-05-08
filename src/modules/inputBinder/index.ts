@@ -3,6 +3,7 @@ import { GameObject, PlayerCharacter, GContext, GCommand } from '@/core/types';
 import { WorldManager } from '@/modules/world';
 import { GEngine } from '@/modules/gLanguage';
 import { CommandContextSession } from '@/modules/inputParser'; // For session type
+import { AccountManager } from '@/modules/accounts'; 
 
 export class InputBinder {
     public static initialize() {
@@ -10,6 +11,53 @@ export class InputBinder {
     }
 
     public static async bindAndExecute(parsedCommand: GCommand, session: CommandContextSession): Promise<void> {
+
+        const verb = parsedCommand.func; // Already lowercased by parser if needed
+        if (!verb) {
+            session.send("What do you want to do?"); // Should not happen if parser ensures func
+            return;
+        }
+
+        if (verb === 'connect') {
+            if (parsedCommand.args.length < 2) {
+                session.send("Usage: connect <username> <password>");
+                return;
+            }
+            const loginId = parsedCommand.args[0] as string;
+            const password = parsedCommand.args[1] as string;
+
+            logger.info(`Attempting login for user: ${loginId}`);
+            const account = await AccountManager.findAccountByLoginId(loginId);
+
+            if (!account) {
+                logger.warn(`Login failed: Account not found for ${loginId}`);
+                session.send("Login failed: Invalid username or password.");
+                return;
+            }
+
+            const passwordVerified = await AccountManager.verifyPassword(account, password);
+            if (!passwordVerified) {
+                logger.warn(`Login failed: Incorrect password for ${loginId}`);
+                session.send("Login failed: Invalid username or password.");
+                return;
+            }
+
+            // TODO: Update session state here!
+            // session.accountId = account.id;
+            // session.isAuthenticated = true;
+            logger.info(`Login successful for user: ${loginId} (Account ID: ${account.id})`);
+            session.send(`Welcome, ${account.loginId}!`);
+            // Optionally list characters or prompt for character connection
+            if (account.characterIds && account.characterIds.length > 0) {
+                session.send(`Your characters: ${account.characterIds.join(', ')}`);
+                session.send(`Use 'connect character <name>' to play.`);
+            } else {
+                session.send("You have no characters yet. Use 'create character <name>' to make one."); // Assuming a create char command exists later
+            }
+            return; // Handled connect command, stop further processing
+        }
+
+
         // TODO: Authenticate session and get actor (PlayerCharacter) object.
         // This is a critical piece for a real MUD.
         // For now, using a placeholder actor.
@@ -26,13 +74,6 @@ export class InputBinder {
         if (!actor) { // If even placeholder isn't there, create a temporary, minimal one
             logger.warn("Default actor #player_prototype not found. Using a temporary in-memory actor.");
             actor = { _id: "temp_actor", id: "temp_actor", name: "Temporary Actor", parentIds: ["#object"], attributes: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-        }
-
-
-        const verb = parsedCommand.func; // Already lowercased by parser if needed
-        if (!verb) {
-            session.send("What do you want to do?"); // Should not happen if parser ensures func
-            return;
         }
 
         let commandHandlerObject: GameObject | null = null;

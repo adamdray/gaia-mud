@@ -28,6 +28,8 @@ async function serverStartup() { // Renamed main to serverStartup
 
     // 2. Initialize Core Game Systems
     await WorldManager.initialize();    // Load core objects, etc.
+    // Explicitly load objects from example file after core init
+    await WorldManager.loadObjectsFromFile('world_data/examples/core_objects.yaml'); // Or .json if you saved it that way
     await GEngine.initialize();         // Load G stdlib, etc.
     await AccountManager.initialize(); // Ensure AccountManager is initialized first
     await AccountManager.ensureAdminExists(); // Add this call
