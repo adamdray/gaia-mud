@@ -88,7 +88,8 @@ export class GStandardLibrary {
                 stdLibLogger.warn(`[G get_attr] Object not found or resolved: ${JSON.stringify(objRefOrObject)}`);
                 return null;
             }
-            return StdLibWorldManager.getAttributeValue(targetObj.id, attrName);
+            const result = await StdLibWorldManager.getAttributeValue(targetObj.id, attrName);
+            return result ?? null;
         });
 
         this.register('set_attr', async (args: GValue[], context: GContext) => {
