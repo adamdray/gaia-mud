@@ -1,0 +1,46 @@
+# This is YAML. For the script, we'll use a JSON representation that can be loaded.
+# The WorldManager.loadObjectsFromFile will need a YAML parser (like 'yaml' package)
+# or you can convert this to JSON for initial loading.
+# For simplicity of this bash script, this will be treated as JSON if loaded directly by it.
+# If using YAML, ensure your loadObjectsFromFile handles it.
+
+# Using JSON array format for this script to load easily via JSON.parse
+[
+  {
+    "id": "#object",
+    "_id": "#object",
+    "name": "Base Object",
+    "description": "The ultimate ancestor of all things.",
+    "parentIds": [],
+    "attributes": {
+      "startup": "[log ['#object.startup executed.']]",
+      "on_message": "[log ['Message for #', @this.id, ': ', arg0]]"
+    },
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "#room",
+    "_id": "#room",
+    "name": "Generic Room",
+    "parentIds": ["#object"],
+    "description": "A non-descript location.",
+    "attributes": {
+      "look_description": "You are in a generic room. It's quite plain."
+    },
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "#player_prototype",
+    "_id": "#player_prototype",
+    "name": "Base Player",
+    "parentIds": ["#object"],
+    "attributes": {
+      "health": 100,
+      "on_connect": "[log ['Player ', @this.name, ' connected.']]"
+    },
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+]

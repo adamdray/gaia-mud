@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GAIA MUD Client</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif; /* Using Inter font as per general guidelines */
+            overscroll-behavior: none; /* Prevent pull-to-refresh on mobile */
+        }
+        #outputContainer {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            border: 1px solid #4A5568; /* gray-700 */
+            background-color: #1A202C; /* gray-900 */
+            color: #E2E8F0; /* gray-300 */
+            border-radius: 0.5rem; /* rounded-lg */
+        }
+        #output p {
+            margin-bottom: 0.5rem;
+            word-break: break-word;
+        }
+        #output .server-message {
+            color: #A0AEC0; /* gray-500 */
+        }
+        #output .client-command {
+            color: #63B3ED; /* blue-400 */
+            font-style: italic;
+        }
+        #output .error-message {
+            color: #FC8181; /* red-400 */
+            font-weight: bold;
+        }
+        #output .system-message {
+            color: #F6E05E; /* yellow-400 */
+        }
+        .modal {
+            display: none; /* Hidden by default */
+        }
+        .modal.active {
+            display: flex;
+        }
+        /* Custom scrollbar for webkit browsers */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2D3748; /* gray-800 */
+            border-radius: 0.5rem;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4A5568; /* gray-700 */
+            border-radius: 0.5rem;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #718096; /* gray-600 */
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-800 text-gray-100 h-screen flex flex-col p-4">
+
+    <div id="loginModal" class="modal fixed inset-0 bg-gray-900 bg-opacity-75 items-center justify-center p-4 z-50">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+            <h2 class="text-2xl font-semibold mb-6 text-center text-white">Connect to GAIA MUD</h2>
+            <form id="loginForm">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-300 mb-1">Username</label>
+                    <input type="text" id="username" name="username" required
+                           class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-500"
+                           placeholder="Enter your username">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-gray-300 mb-1">Password</label>
+                    <input type="password" id="password" name="password" required
+                           class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-500"
+                           placeholder="Enter your password">
+                </div>
+                <button type="submit"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150">
+                    Connect
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="outputContainer" class="mb-4">
+        <div id="output">
+            </div>
+    </div>
+
+    <form id="inputForm" class="flex items-center">
+        <input type="text" id="input" autocomplete="off" placeholder="Enter command..."
+               class="flex-grow px-4 py-3 bg-gray-700 border border-gray-600 rounded-l-md text-gray-100 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-500">
+        <button type="submit"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150">
+            Send
+        </button>
+    </form>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const loginModal = document.getElementById('loginModal');
+            const loginForm = document.getElementById('loginForm');
+            const outputDiv = document.getElementById('output');
+            const outputContainer = document.getElementById('outputContainer');
+            const inputForm = document.getElementById('inputForm');
+            const inputField = document.getElementById('input');
+
+            let socket = null;
+            let username = ''; // Store username after login
+
+            // Show login modal on load
+            loginModal.classList.add('active');
+            document.getElementById('username').focus();
+
+
+            function addMessageToOutput(message, type = 'server-message') {
+                const p = document.createElement('p');
+                p.textContent = message;
+                p.className = type; // Apply styling based on message type
+                outputDiv.appendChild(p);
+                // Scroll to the bottom of the output container
+                outputContainer.scrollTop = outputContainer.scrollHeight;
+            }
+
+            loginForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+
+                if (!username || !password) {
+                    addMessageToOutput('Username and password are required.', 'error-message');
+                    return;
+                }
+
+                loginModal.classList.remove('active');
+                addMessageToOutput(`Attempting to connect as ${username}...`, 'system-message');
+                connectWebSocket(username, password);
+            });
+
+            function connectWebSocket(user, pass) {
+                // If a socket already exists, close it before creating a new one
+                if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+                    socket.close();
+                }
+
+                socket = new WebSocket('ws://localhost:4000'); // Ensure this matches your server port
+
+                socket.onopen = () => {
+                    addMessageToOutput('Connected to GAIA MUD server.', 'system-message');
+                    // Send a connect command (adjust format as per your server's protocol)
+                    // The spec implies the server handles 'connect user password' after telnet connects,
+                    // so for WebSocket, we might send a JSON object or a specific command string.
+                    // For now, let's assume a simple command:
+                    socket.send(`connect ${user} ${pass}`);
+                    inputField.focus();
+                };
+
+                socket.onmessage = (event) => {
+                    // Assuming the server sends plain text messages
+                    addMessageToOutput(event.data, 'server-message');
+                };
+
+                socket.onerror = (error) => {
+                    console.error('WebSocket Error:', error);
+                    addMessageToOutput('WebSocket error. Check console for details. Could not connect to server.', 'error-message');
+                     // Optionally, re-show login modal or provide a reconnect button
+                    loginModal.classList.add('active'); // Re-show login modal on error
+                };
+
+                socket.onclose = (event) => {
+                    let reason = '';
+                    if (event.code === 1000) reason = "Normal closure";
+                    else if (event.code === 1001) reason = "Endpoint going away";
+                    else if (event.code === 1002) reason = "Protocol error";
+                    else if (event.code === 1003) reason = "Unsupported data";
+                    else if (event.code === 1005) reason = "No status received";
+                    else if (event.code === 1006) reason = "Abnormal closure (e.g., server down or network issue)";
+                    else reason = `Unknown reason (code: ${event.code})`;
+
+                    addMessageToOutput(`Disconnected from server: ${reason}.`, 'error-message');
+                    socket = null; // Clear the socket variable
+                    // Re-show login modal to allow reconnection attempt
+                    if (!loginModal.classList.contains('active')) {
+                        loginModal.classList.add('active');
+                    }
+                };
+            }
+
+            inputForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const message = inputField.value.trim();
+                if (message && socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(message);
+                    addMessageToOutput(`> ${message}`, 'client-command'); // Echo sent command
+                    inputField.value = ''; // Clear input field
+                } else if (!socket || socket.readyState !== WebSocket.OPEN) {
+                    addMessageToOutput('Not connected to server. Please connect first.', 'error-message');
+                }
+                inputField.focus();
+            });
+
+            // Initial welcome message in the client
+            addMessageToOutput('Welcome to GAIA MUD Client. Please log in.', 'system-message');
+        });
+    </script>
+</body>
+</html>
+<!--
+**How to Use This Client:**
+
+1.  **Save the code:** Save the entire block of code above as an HTML file (e.g., `gaia_client.html`) in your `gaia-mud` project directory (or anywhere you like, but it's convenient to keep it with the server project).
+2.  **Ensure your MUD server is running:** Start your Node.js MUD server using `npm run dev` (or `npm run start` if you've built it). It should be listening on port 4000 for WebSocket connections.
+3.  **Open the HTML file in your browser:** Double-click the `gaia_client.html` file, or open it via your browser's "File > Open" menu.
+4.  **Login:** The modal should appear. Enter a username and password.
+    * **Important:** Your MUD server's `InputParser` and `AccountManager` will need to be able to handle a command like `"connect <username> <password>"` that this client sends upon successful WebSocket connection. You'll need to implement the logic on the server-side to authenticate the user based on this command.
+5.  **Interact:** If the connection and login are successful, you should see a "Connected" message. You can then type commands in the input field and press Enter or click "Send". Messages from the server will appear in the output area.
+
+**Key features of this client:**
+
+* **Tailwind CSS:** For quick and decent styling.
+* **Login Modal:** A clean way to get credentials.
+* **WebSocket Communication:** Handles connecting, sending, and receiving messages.
+* **Basic Error/Status Handling:** Displays connection status, errors, and disconnections in the output.
+* **Command Echo:** Shows the commands you send in the output area for better context.
+* **Auto-scrolling Output:** The output area will scroll to the latest message.
+* **Responsive (Basic):** Tailwind helps make it usable on different screen sizes.
+
+You can further enhance this client by adding more features, such as:
+
+* More sophisticated styling.
+* Client-side command history (using arrow keys in the input).
+* Support for ANSI color codes or other MUD-specific formatting if your server sends them.
+* A "Reconnect" button.
+* Storing connection details (host/port) if they become configurable.
+
+This should give you a solid starting point for a web-based MUD clie
+-->
