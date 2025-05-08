@@ -1,70 +1,85 @@
-import { logger } from '@/utils/logger';
+import { logger as accountLogger } from '@/utils/logger'; // Use different name
 import { PlayerAccount, ObjectID } from '@/core/types';
-import { DatabaseManager } from '../database';
-import { randomUUID } from 'crypto'; // Node built-in crypto
+import { DatabaseManager as AccountDBManager } from '@/modules/database'; // Use different name
+import { randomUUID } from 'crypto'; // Node built-in crypto for generating IDs
 // import bcrypt from 'bcryptjs'; // For password hashing - npm install bcryptjs @types/bcryptjs
 
 export class AccountManager {
     public static initialize() {
-        logger.info('Account Manager initialized.');
+        accountLogger.info('Account Manager initialized.');
     }
 
-    public static async createAccount(data: Omit<PlayerAccount, '_id' | '_rev'| 'id' | 'hashedPassword' | 'createdAt' | 'characterIds' | 'roles'> & { passwordPlainText: string }): Promise<PlayerAccount | null> {
+    public static async createAccount(
+        data: Omit<PlayerAccount, '_id' | '_rev'| 'id' | 'hashedPassword' | 'createdAt' | 'characterIds' | 'roles'> & { passwordPlainText: string }
+    ): Promise<PlayerAccount | null> {
         const { loginId, email, realName, passwordPlainText } = data;
         
-        // TODO: Check if loginId or email already exists (requires a view in CouchDB)
-        // const existingByLogin = await this.findAccountByLoginId(loginId);
-        // if (existingByLogin) {
-        //     logger.warn(`Account creation failed: Login ID "${loginId}" already exists.`);
-        //     return null;
-        // }
+        // Check if loginId or email already exists
+        const existingByLogin = await this.findAccountByLoginId(loginId);
+        if (existingByLogin) {
+            accountLogger.warn(`Account creation failed: Login ID "${loginId}" already exists.`);
+            // Optionally throw an error or return a specific status
+            return null;
+        }
+        // TODO: Add similar check for email if it should be unique.
 
-        // const hashedPassword = await bcrypt.hash(passwordPlainText, 10);
-        const accountId = randomUUID();
+        // const hashedPassword = await bcrypt.hash(passwordPlainText, 10); // Use bcrypt in production
+        const hashedPasswordPlaceholder = `hashed_${passwordPlainText}`; // Placeholder
+        
+        const accountId = randomUUID(); // Generate a unique ID for the account
+
         const newAccount: PlayerAccount = {
-            _id: accountId, // Use UUID for _id
-            id: accountId,  // Also for logical id
+            _id: accountId, // Use UUID for _id in CouchDB
+            id: accountId,  // Also use for our logical id field
             loginId,
             email,
-            realName,
-            hashedPassword: `hashed_${passwordPlainText}`, // Replace with actual bcrypt hash
+            realName: realName || '', // Ensure realName is at least an empty string
+            hashedPassword: hashedPasswordPlaceholder,
             characterIds: [],
-            roles: ['player'], // Default role
-            createdAt: new Date().toISOString(),
+            roles: ['player'], // Default role for new accounts
+            createdAt: new Date().toISOString(), // Use ISO string for dates
         };
         try {
-            const response = await DatabaseManager.getAccountsDB().insert(newAccount);
+            const response = await AccountDBManager.getAccountsDB().insert(newAccount);
             if (!response.ok) {
-                 throw new Error(`CouchDB insert error: ${response.id} - ${response.error} - ${response.reason}`);
+                // More detailed error from CouchDB response
+                throw new Error(`CouchDB insert error for account <span class="math-inline">\{loginId\}\: ID\=</span>{response.id}, Rev=${response.rev}`); // Error/Reason might not be present
             }
-            newAccount._rev = response.rev; // Store revision
-            logger.info(`Account created: ${loginId} (ID: ${newAccount.id})`);
+            newAccount._rev = response.rev; // Store revision after successful insert
+            accountLogger.info(`Account created: ${loginId} (ID: ${newAccount.id})`);
             return newAccount;
-        } catch (error) {
-            logger.error(`Error creating account ${loginId}:`, error);
+        } catch (error: any) { // Catch potential errors during insert
+            const errorDetails = error.message || JSON.stringify(error);
+            accountLogger.error(`Error creating account ${loginId}: ${errorDetails}`);
+            // Rethrow or return null based on desired error handling
             return null;
         }
     }
 
     public static async findAccountByLoginId(loginId: string): Promise<PlayerAccount | null> {
         try {
-            // Query CouchDB for the account by loginId.
-            // This requires a view in your accounts database, e.g., a view named 'by_loginId'
-            // in a design document, e.g., '_design/accounts'.
-            // Map function: function(doc) { if(doc.loginId) { emit(doc.loginId, null); } }
-            const result = await DatabaseManager.getAccountsDB().view('accounts', 'by_loginId', {
+            // Query CouchDB using the 'by_loginId' view.
+            // The view emits `loginId` as key. We want the document associated with it.
+            const result = await AccountDBManager.getAccountsDB().view('accounts', 'by_loginId', {
                 key: loginId,
-                include_docs: true
+                include_docs: true // Crucial to get the full document
             });
             if (result.rows.length > 0) {
-                return result.rows[0].doc as PlayerAccount;
+                // Ensure the doc has the correct type structure
+                const accountDoc = result.rows[0].doc as PlayerAccount;
+                if (accountDoc && accountDoc.id && accountDoc.loginId) { // Basic check
+                    return accountDoc;
+                }
+                accountLogger.warn(`Document found for loginId ${loginId} but is not a valid PlayerAccount.`);
+                return null;
             }
-            return null;
+            return null; // No account found with that loginId
         } catch (error: any) {
-            if (error.statusCode === 404 || error.description?.includes("missing_named_view")) {
-                logger.warn(`View 'accounts/by_loginId' not found or DB/design doc missing. Cannot find account by loginId. Error: ${error.description || error.message}`);
+            // Handle cases where the view or design document might be missing
+            if (error.statusCode === 404 || error.description?.includes("missing_named_view") || (error.error === 'not_found' && error.reason === 'missing_named_view')) {
+                accountLogger.warn(`View 'accounts/by_loginId' not found or DB/design doc missing. Cannot find account by loginId. Error: ${error.description || error.message || error.reason}`);
             } else {
-                logger.error(`Error finding account by loginId ${loginId}:`, error);
+                accountLogger.error(`Error finding account by loginId ${loginId}:`, error);
             }
             return null;
         }
@@ -72,23 +87,35 @@ export class AccountManager {
 
     public static async verifyPassword(account: PlayerAccount, passwordPlainText: string): Promise<boolean> {
         if (!account.hashedPassword) return false;
-        // return bcrypt.compare(passwordPlainText, account.hashedPassword);
-        return account.hashedPassword === `hashed_${passwordPlainText}`; // Placeholder, use bcrypt
+        // return bcrypt.compare(passwordPlainText, account.hashedPassword); // Use bcrypt in production
+        return account.hashedPassword === `hashed_${passwordPlainText}`; // Placeholder comparison
     }
 
+    // Add a character's ObjectID to an account's list of characters
     public static async addCharacterToAccount(accountId: string, characterId: ObjectID): Promise<boolean> {
         try {
-            const account = await DatabaseManager.getAccountsDB().get(accountId) as PlayerAccount;
-            if (!account) return false;
+            const account = await AccountDBManager.getAccountsDB().get(accountId) as PlayerAccount; // Fetch by _id
+            if (!account) {
+                accountLogger.warn(`Cannot add character: Account ${accountId} not found.`);
+                return false;
+            }
             if (!account.characterIds.includes(characterId)) {
                 account.characterIds.push(characterId);
-                const response = await DatabaseManager.getAccountsDB().insert(account);
+                account.lastLoginAt = new Date().toISOString(); // Also update lastLoginAt if adding char implies activity
+                const response = await AccountDBManager.getAccountsDB().insert(account); // This updates the existing doc due to _id and _rev
                 return response.ok;
             }
-            return true; // Already has character
-        } catch (error) {
-            logger.error(`Error adding character ${characterId} to account ${accountId}:`, error);
+            return true; // Character already associated
+        } catch (error: any) {
+            const errorDetails = error.message || JSON.stringify(error);
+            accountLogger.error(`Error adding character ${characterId} to account ${accountId}: ${errorDetails}`);
             return false;
         }
     }
+
+    // TODO: Add methods for:
+    // - findAccountById(id: string)
+    // - updateAccount(account: PlayerAccount)
+    // - deleteAccount(id: string)
+    // - removeCharacterFromAccount(accountId: string, characterId: ObjectID)
 }

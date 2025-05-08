@@ -1,10 +1,3 @@
-# This is YAML. For the script, we'll use a JSON representation that can be loaded.
-# The WorldManager.loadObjectsFromFile will need a YAML parser (like 'yaml' package)
-# or you can convert this to JSON for initial loading.
-# For simplicity of this bash script, this will be treated as JSON if loaded directly by it.
-# If using YAML, ensure your loadObjectsFromFile handles it.
-
-# Using JSON array format for this script to load easily via JSON.parse
 [
   {
     "id": "#object",
@@ -14,7 +7,7 @@
     "parentIds": [],
     "attributes": {
       "startup": "[log ['#object.startup executed.']]",
-      "on_message": "[log ['Message for #', @this.id, ': ', arg0]]"
+      "on_message": "[log ['Message for #', @this.id, ' from ', arg0.id, ': ', arg1]]"
     },
     "createdAt": "2024-01-01T00:00:00.000Z",
     "updatedAt": "2024-01-01T00:00:00.000Z"
