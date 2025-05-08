@@ -111,7 +111,7 @@ export class GInterpreter {
                     // The variable holds a string of G code. Parse and execute it.
                     // The 'evaluatedArgs' become the 'initialArgs' for this dynamically executed code.
                     const ast = GEngine.parse(gCodeToRun);
-                    return GEngine.execute(ast, context, evaluatedArgs);
+                    return GEngine.evaluate(ast, context, evaluatedArgs);
                 } else {
                     throw new Error(`Interpreter: Variable "${varOrObjRef}" does not contain executable G code string.`);
                 }
