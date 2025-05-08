@@ -29,6 +29,8 @@ async function serverStartup() { // Renamed main to serverStartup
     // 2. Initialize Core Game Systems
     await WorldManager.initialize();    // Load core objects, etc.
     await GEngine.initialize();         // Load G stdlib, etc.
+    await AccountManager.initialize(); // Ensure AccountManager is initialized first
+    await AccountManager.ensureAdminExists(); // Add this call
     await AccountManager.initialize();
     await SecurityManager.initialize();
     InputParser.initialize();

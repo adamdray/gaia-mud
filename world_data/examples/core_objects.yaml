@@ -6,8 +6,8 @@
     "description": "The ultimate ancestor of all things.",
     "parentIds": [],
     "attributes": {
-      "startup": "[log ['#object.startup executed.']]",
-      "on_message": "[log ['Message for #', @this.id, ' from ', arg0.id, ': ', arg1]]"
+      "startup": "[log [\"#object.startup executed.\"]]",
+      "on_message": "[log [\"Message for #\", @this.id, \" from \", arg0.id, \": \", arg1]]"
     },
     "createdAt": "2024-01-01T00:00:00.000Z",
     "updatedAt": "2024-01-01T00:00:00.000Z"
@@ -31,7 +31,7 @@
     "parentIds": ["#object"],
     "attributes": {
       "health": 100,
-      "on_connect": "[log ['Player ', @this.name, ' connected.']]"
+      "on_connect": "[log [\"Player \", @this.name, \" connected.\"]]"
     },
     "createdAt": "2024-01-01T00:00:00.000Z",
     "updatedAt": "2024-01-01T00:00:00.000Z"

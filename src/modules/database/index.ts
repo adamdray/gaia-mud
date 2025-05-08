@@ -57,6 +57,10 @@ export class DatabaseManager {
                     map: "function (doc) { if (doc.loginId && doc.id) { emit(doc.loginId, null); } }"
                     // 'null' as value means we don't need a specific value, just the doc (via include_docs=true)
                 },
+                by_role: { // View to find accounts by role
+                    map: "function (doc) { if (doc.roles && Array.isArray(doc.roles)) { doc.roles.forEach(function(role){ emit(role, doc.loginId); }); } }"
+                },
+                
                 // Add other views as needed, e.g., by_email
                 // by_email: {
                 //   map: "function (doc) { if (doc.email && doc.id) { emit(doc.email, null); } }"

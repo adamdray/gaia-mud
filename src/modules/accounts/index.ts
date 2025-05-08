@@ -9,10 +9,36 @@ export class AccountManager {
         accountLogger.info('Account Manager initialized.');
     }
 
+    public static async findAdminAccount(): Promise<PlayerAccount | null> {
+        try {
+            // Query CouchDB using the 'by_role' view for the 'admin' role
+            const result = await AccountDBManager.getAccountsDB().view('accounts', 'by_role', {
+                key: 'admin',
+                limit: 1, // We only need to know if at least one exists
+                include_docs: true
+            });
+            if (result.rows.length > 0 && result.rows[0].doc) {
+                return result.rows[0].doc as PlayerAccount;
+            }
+            return null; // No admin found
+        } catch (error: any) {
+            if (error.statusCode === 404 || error.description?.includes("missing_named_view") || (error.error === 'not_found' && error.reason === 'missing_named_view')) {
+                accountLogger.warn(`View 'accounts/by_role' not found. Cannot check for admin account.`);
+                // Consider this non-fatal for startup, but log it.
+            } else {
+                accountLogger.error(`Error finding admin account:`, error);
+            }
+            return null; // Treat errors as "admin not found" for safety
+        }
+    }
+        
+
     public static async createAccount(
-        data: Omit<PlayerAccount, '_id' | '_rev'| 'id' | 'hashedPassword' | 'createdAt' | 'characterIds' | 'roles'> & { passwordPlainText: string }
-    ): Promise<PlayerAccount | null> {
-        const { loginId, email, realName, passwordPlainText } = data;
+            data: Omit<PlayerAccount, '_id' | '_rev'| 'id' | 'hashedPassword' | 'createdAt' | 'characterIds' | 'roles'> & { passwordPlainText: string },
+            initialRoles?: string[] // Optional roles parameter
+        ): Promise<PlayerAccount | null> {
+
+            const { loginId, email, realName, passwordPlainText } = data;
         
         // Check if loginId or email already exists
         const existingByLogin = await this.findAccountByLoginId(loginId);
@@ -36,7 +62,7 @@ export class AccountManager {
             realName: realName || '', // Ensure realName is at least an empty string
             hashedPassword: hashedPasswordPlaceholder,
             characterIds: [],
-            roles: ['player'], // Default role for new accounts
+            roles: initialRoles || ['player'], // Use provided roles or default to player
             createdAt: new Date().toISOString(), // Use ISO string for dates
         };
         try {
@@ -112,6 +138,47 @@ export class AccountManager {
             return false;
         }
     }
+
+    public static async ensureAdminExists(): Promise<void> {
+            const existingAdmin = await this.findAdminAccount();
+            if (existingAdmin) {
+                accountLogger.info(`Admin account found: ${existingAdmin.loginId} (ID: ${existingAdmin.id})`);
+                return;
+            }
+        
+            accountLogger.warn('No admin account found. Attempting to create default admin...');
+        
+            const adminUser = process.env.DEFAULT_ADMIN_USER || 'admin';
+            const adminPass = process.env.DEFAULT_ADMIN_PASS;
+            const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || `${adminUser}@example.com`;
+        
+            if (!adminPass) {
+                accountLogger.error('CRITICAL: DEFAULT_ADMIN_PASS environment variable not set. Cannot create default admin.');
+                // Consider throwing an error here or exiting if an admin is mandatory
+                return;
+            }
+            if (adminPass === 'changeme') {
+                 accountLogger.warn('WARNING: Default admin password is still "changeme". Please change DEFAULT_ADMIN_PASS in your .env file!');
+            }
+        
+            const adminAccount = await this.createAccount(
+                {
+                    loginId: adminUser,
+                    email: adminEmail,
+                    realName: 'Default Admin',
+                    passwordPlainText: adminPass,
+                },
+                ['admin', 'player'] // Assign both admin and player roles
+            );
+        
+            if (adminAccount) {
+                accountLogger.info(`Successfully created default admin account: ${adminUser}`);
+            } else {
+                accountLogger.error(`Failed to create default admin account ${adminUser}. Check previous errors.`);
+                // Consider throwing an error here depending on requirements
+            }
+        }
+        
 
     // TODO: Add methods for:
     // - findAccountById(id: string)

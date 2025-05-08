@@ -244,8 +244,8 @@ export class WorldManager {
                 parentIds: [], // #object has no parents
                 attributes: {
                     // Default message handler. arg0 is sender, arg1 is message (convention)
-                    "on_message": "[log ['Message for #', @this.id, ' from ', [get_attr arg0 'id'], ': ', arg1]]", // Use get_attr for sender ID
-                    "startup": "[log ['#object.startup executed.']]"
+                    "on_message": "[log [\"Message for #\", @this.id, \" from \", [get_attr arg0 \"id\"], \": \", arg1]]", // Use get_attr for sender ID
+                    "startup": "[log [\"#object.startup executed.\"]]"
                     // Add other essential default attributes for #object
                 },
                 createdAt: new Date().toISOString(), // Use ISO string for dates
